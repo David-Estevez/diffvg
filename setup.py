@@ -28,6 +28,22 @@ class Build(build_ext):
             raise RuntimeError("CMake must be installed to build the following extensions: " +
                                ", ".join(e.name for e in self.extensions))
 
+        # Auto-initialize git submodules if they exist but are empty
+        repo_root = os.path.dirname(os.path.abspath(__file__))
+        gitmodules_path = os.path.join(repo_root, '.gitmodules')
+        if os.path.exists(gitmodules_path):
+            pybind11_path = os.path.join(repo_root, 'pybind11', 'CMakeLists.txt')
+            if not os.path.exists(pybind11_path):
+                print("Initializing git submodules...")
+                try:
+                    subprocess.check_call(['git', 'submodule', 'update', '--init', '--recursive'], 
+                                        cwd=repo_root)
+                    print("Submodules initialized successfully")
+                except subprocess.CalledProcessError as e:
+                    print(f"Warning: Could not initialize submodules: {e}")
+                except FileNotFoundError:
+                    print("Warning: git not found, skipping submodule initialization")
+
         super().run()
 
     def build_extension(self, ext):
@@ -59,6 +75,32 @@ class Build(build_ext):
             env = os.environ.copy()
             env['CXXFLAGS'] = '{} -DVERSION_INFO=\\"{}\\"'.format(env.get('CXXFLAGS', ''),
                                                                   self.distribution.get_version())
+            
+            # Auto-detect and set environment variables if not already set
+            if ext.build_with_cuda and platform.system() != "Windows":
+                # Auto-detect CUDA installation if not set
+                if 'CUDA_HOME' not in env:
+                    cuda_paths = ['/usr/local/cuda-12.6', '/usr/local/cuda-12', '/usr/local/cuda', '/opt/cuda']
+                    for cuda_path in cuda_paths:
+                        if os.path.exists(os.path.join(cuda_path, 'bin', 'nvcc')):
+                            env['CUDA_HOME'] = cuda_path
+                            # Add CUDA bin to PATH if not already there
+                            cuda_bin = os.path.join(cuda_path, 'bin')
+                            if cuda_bin not in env.get('PATH', ''):
+                                env['PATH'] = cuda_bin + ':' + env.get('PATH', '')
+                            print(f"Auto-detected CUDA at: {cuda_path}")
+                            break
+                
+                # Auto-detect compatible GCC if not set
+                if 'CC' not in env and 'CXX' not in env:
+                    for gcc_version in ['12', '11', '10']:
+                        gcc_path = f'/usr/bin/gcc-{gcc_version}'
+                        gxx_path = f'/usr/bin/g++-{gcc_version}'
+                        if os.path.exists(gcc_path) and os.path.exists(gxx_path):
+                            env['CC'] = gcc_path
+                            env['CXX'] = gxx_path
+                            print(f"Auto-selected GCC {gcc_version}: {gcc_path}, {gxx_path}")
+                            break
             if not os.path.exists(self.build_temp):
                 os.makedirs(self.build_temp)
             subprocess.check_call(['cmake', ext.sourcedir] + cmake_args, cwd=self.build_temp, env=env)
@@ -90,7 +132,19 @@ if 'DIFFVG_CUDA' in os.environ:
 
 setup(name = 'diffvg',
       version = '0.0.1',
-      install_requires = ["svgpathtools"],
+      install_requires = [
+          "numpy",
+          "svgpathtools",
+          "svgwrite", 
+          "cssutils",
+          "numba",
+          "torch-tools",
+          "visdom",
+          "scikit-image",
+          # PyTorch/torchvision should be installed with CUDA support beforehand:
+          # pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126
+          # Or: conda install pytorch torchvision pytorch-cuda=12.1 -c pytorch -c nvidia
+      ],
       description = 'Differentiable Vector Graphics',
       ext_modules = [CMakeExtension('diffvg', '', build_with_cuda)],
       cmdclass = dict(build_ext=Build, install=install),

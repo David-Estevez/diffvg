@@ -5,10 +5,34 @@ project(diffvg VERSION 0.0.1 DESCRIPTION "Differentiable Vector Graphics")
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/")
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# Auto-detect compatible GCC version for CUDA
+if(NOT WIN32 AND NOT DEFINED CMAKE_C_COMPILER AND NOT DEFINED CMAKE_CXX_COMPILER)
+    # Try to find GCC versions compatible with CUDA 12
+    foreach(GCC_VERSION 12 11 10)
+        find_program(GCC_${GCC_VERSION} gcc-${GCC_VERSION})
+        find_program(GXX_${GCC_VERSION} g++-${GCC_VERSION})
+        if(GCC_${GCC_VERSION} AND GXX_${GCC_VERSION})
+            set(CMAKE_C_COMPILER ${GCC_${GCC_VERSION}})
+            set(CMAKE_CXX_COMPILER ${GXX_${GCC_VERSION}})
+            message(STATUS "Auto-selected GCC ${GCC_VERSION}: ${CMAKE_C_COMPILER}, ${CMAKE_CXX_COMPILER}")
+            break()
+        endif()
+    endforeach()
+    
+    # Fallback to system default if no versioned GCC found
+    if(NOT DEFINED CMAKE_C_COMPILER)
+        find_program(CMAKE_C_COMPILER gcc)
+        find_program(CMAKE_CXX_COMPILER g++)
+        if(CMAKE_C_COMPILER AND CMAKE_CXX_COMPILER)
+            message(STATUS "Using system default GCC: ${CMAKE_C_COMPILER}, ${CMAKE_CXX_COMPILER}")
+        endif()
+    endif()
+endif()
+
 if(WIN32)
-    find_package(Python 3.6 COMPONENTS Development REQUIRED)
+    find_package(Python 3.6 COMPONENTS Interpreter Development REQUIRED)
 else()
-    find_package(Python 3.7 COMPONENTS Development REQUIRED)
+    find_package(Python 3.7 COMPONENTS Interpreter Development REQUIRED)
 endif()
 add_subdirectory(pybind11)
 
@@ -16,11 +40,30 @@ option(DIFFVG_CUDA "Build diffvg with GPU code path?" ON)
 
 if(DIFFVG_CUDA)
     message(STATUS "Build with CUDA support")
-    find_package(CUDA 10 REQUIRED)
-    set(CMAKE_CUDA_STANDARD 11)
+    
+    # Auto-detect CUDA installation
+    if(NOT DEFINED CMAKE_CUDA_COMPILER)
+        find_program(NVCC_EXECUTABLE nvcc 
+            HINTS ${CUDA_TOOLKIT_ROOT_DIR}/bin
+                  /usr/local/cuda/bin
+                  /usr/local/cuda-12.6/bin
+                  /usr/local/cuda-12/bin
+                  /opt/cuda/bin
+        )
+        if(NVCC_EXECUTABLE)
+            set(CMAKE_CUDA_COMPILER ${NVCC_EXECUTABLE})
+            get_filename_component(CUDA_BIN_DIR ${NVCC_EXECUTABLE} DIRECTORY)
+            get_filename_component(CUDA_ROOT_DIR ${CUDA_BIN_DIR} DIRECTORY)
+            set(CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES ${CUDA_ROOT_DIR}/include)
+            message(STATUS "Found CUDA at: ${CUDA_ROOT_DIR}")
+        endif()
+    endif()
+    
+    find_package(CUDA 12 REQUIRED)
+    set(CMAKE_CUDA_STANDARD 14)
     if(NOT WIN32)
         # Hack: for some reason the line above doesn't work on some Linux systems.
-        set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -std=c++11")
+        set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -std=c++14 -allow-unsupported-compiler --expt-relaxed-constexpr --expt-extended-lambda -Xcompiler -std=gnu++14")
         #set(CUDA_NVCC_FLAGS_DEBUG "-g -G")
     endif()
 else()
@@ -118,7 +161,7 @@ elseif(APPLE)
     set_target_properties(diffvg PROPERTIES INSTALL_RPATH "@loader_path")
 endif()
 
-set_property(TARGET diffvg PROPERTY CXX_STANDARD 11)
+set_property(TARGET diffvg PROPERTY CXX_STANDARD 14)
 set_target_properties(diffvg PROPERTIES PREFIX "")
 # Still enable assertion in release mode
 string( REPLACE "/DNDEBUG" "" CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE}")

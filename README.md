@@ -16,58 +16,48 @@ diffvg is a differentiable rasterizer for 2D vector graphics. See the webpage fo
 ![circle_outline](https://user-images.githubusercontent.com/951021/65125594-84f7a280-d9aa-11e9-8bc4-669fd2eff2f4.gif)
 ![ellipse_transform](https://user-images.githubusercontent.com/951021/67149013-06b54700-f25b-11e9-91eb-a61171c6d4a4.gif)
 
-# Install
-```
-git submodule update --init --recursive
-conda install -y pytorch torchvision -c pytorch
-conda install -y numpy
-conda install -y scikit-image
-conda install -y -c anaconda cmake
-conda install -y -c conda-forge ffmpeg
-pip install svgwrite
-pip install svgpathtools
-pip install cssutils
-pip install numba
-pip install torch-tools
-pip install visdom
-python setup.py install
-```
-# Install using poetry
+**Note**: this fork is the original code for diffvg with some updates to be able to install it easily in a modern system. I'm not the original author of the code and I did not change the code other than the updates to the build system.
 
-## prerequisite
-install python 3.7, poetry and ffmpeg
+Shoutout to the original authors for such a cool project.
 
-```
-# install poetry (mac, linux)
-curl -sSL https://raw.githubusercontent.com/python-poetry/poetry/master/get-poetry.py | python -
+## Installation
 
-# install ffmpeg
+### Prerequisites
+- **Python 3.7+** (tested with Python 3.12)
+- **PyTorch with CUDA support** (for GPU acceleration)
+- **System tools**: `cmake`, `gcc`/`g++` (preferably GCC 12 for CUDA 12.6 compatibility)
 
-(macos)
-brew install ffmpeg
+### Install with CUDA support (Default)
 
-(linux)
-sudo apt install ffmpeg
+```bash
+# 1. Install PyTorch with CUDA support first
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126
 
-or use conda
-conda install -y -c conda-forge ffmpeg
+# 2. Install diffvg (automatically installs all dependencies and configures build)
+pip install git+https://github.com/David-Estevez/diffvg.git
 ```
 
-## Install python packages
+### CPU-Only Installation
 
-```
-# install all python dependencies
-poetry install
+```bash
+# 1. Install CPU-only PyTorch
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
 
-# install pydiffvg
-poetry run python setup.py install
+# 2. Install diffvg without CUDA
+DIFFVG_CUDA=0 pip install git+https://github.com/David-Estevez/diffvg.git
 ```
 
-Now to run the apps, just add `poetry run` before each of the commands below, e.g.
 
+### Verify Installation
+
+```bash
+python3 -c "import diffvg; import pydiffvg; print('sucess!')"
 ```
-poetry run python single_circle.py
-```
+
+
+
+From the original README:
+---
 
 # Building in debug mode
 
