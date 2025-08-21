@@ -11,8 +11,7 @@ import importlib
 from setuptools import setup, Extension
 from setuptools.command.build_ext import build_ext
 from setuptools.command.install import install
-from distutils.sysconfig import get_config_var
-from distutils.version import LooseVersion
+
 
 class CMakeExtension(Extension):
     def __init__(self, name, sourcedir, build_with_cuda):
@@ -108,31 +107,50 @@ class Build(build_ext):
         else:
             super().build_extension(ext)
 
-torch_spec = importlib.util.find_spec("torch")
-tf_spec = importlib.util.find_spec("tensorflow")
-packages = []
+# Default configuration - assume PyTorch will be available
+packages = ['pydiffvg']
 build_with_cuda = False
+
+# Try to detect PyTorch for CUDA configuration
+torch_spec = importlib.util.find_spec("torch")
 if torch_spec is not None:
-    packages.append('pydiffvg')
-    import torch
-    if torch.cuda.is_available():
-        build_with_cuda = True
+    try:
+        import torch
+        if torch.cuda.is_available():
+            build_with_cuda = True
+            print("CUDA detected via PyTorch")
+        else:
+            print("PyTorch found but CUDA not available")
+    except ImportError:
+        print("Warning: Could not import torch, proceeding with CPU-only build")
+else:
+    print("Warning: PyTorch not found during build, proceeding with default configuration")
+
+# Try to detect TensorFlow for additional packages (optional)
+tf_spec = importlib.util.find_spec("tensorflow")
 if tf_spec is not None and sys.platform != 'win32':
     packages.append('pydiffvg_tensorflow')
     if not build_with_cuda:
-        import tensorflow as tf
-        if tf.test.is_gpu_available(cuda_only=True, min_cuda_compute_capability=None):
-            build_with_cuda = True
-if len(packages) == 0:
-    print('Error: PyTorch or Tensorflow must be installed. For Windows platform only PyTorch is supported.')
-    exit()
+        try:
+            import tensorflow as tf
+            if tf.test.is_gpu_available(cuda_only=True, min_cuda_compute_capability=None):
+                build_with_cuda = True
+                print("CUDA detected via TensorFlow")
+        except (ImportError, AttributeError):
+            print("Warning: Could not detect CUDA via TensorFlow")
+
 # Override build_with_cuda with environment variable
 if 'DIFFVG_CUDA' in os.environ:
     build_with_cuda = os.environ['DIFFVG_CUDA'] == '1'
+    print(f"CUDA build override via environment: {build_with_cuda}")
+
+print(f"Building packages: {packages}")
+print(f"CUDA support: {build_with_cuda}")
 
 setup(name = 'diffvg',
       version = '0.0.1',
       install_requires = [
+          "torch",  # Required for build process
           "numpy",
           "svgpathtools",
           "svgwrite", 
@@ -141,9 +159,6 @@ setup(name = 'diffvg',
           "torch-tools",
           "visdom",
           "scikit-image",
-          # PyTorch/torchvision should be installed with CUDA support beforehand:
-          # pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126
-          # Or: conda install pytorch torchvision pytorch-cuda=12.1 -c pytorch -c nvidia
       ],
       description = 'Differentiable Vector Graphics',
       ext_modules = [CMakeExtension('diffvg', '', build_with_cuda)],
