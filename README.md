@@ -51,7 +51,11 @@ DIFFVG_CUDA=0 pip install git+https://github.com/David-Estevez/diffvg.git
 ### Verify Installation
 
 ```bash
-python3 -c "import diffvg; import pydiffvg; print('sucess!')"
+# Check if diffvg imports correctly
+python3 -c "import diffvg; import pydiffvg; print('diffvg imported successfully')"
+
+# Check if CUDA support is working
+python3 -c "import pydiffvg; pydiffvg.set_use_gpu(True); print('CUDA support verified')"
 ```
 
 

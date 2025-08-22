@@ -107,42 +107,18 @@ class Build(build_ext):
         else:
             super().build_extension(ext)
 
-# Default configuration - assume PyTorch will be available
+# Package configuration
 packages = ['pydiffvg']
-build_with_cuda = False
 
-# Try to detect PyTorch for CUDA configuration
-torch_spec = importlib.util.find_spec("torch")
-if torch_spec is not None:
-    try:
-        import torch
-        if torch.cuda.is_available():
-            build_with_cuda = True
-            print("CUDA detected via PyTorch")
-        else:
-            print("PyTorch found but CUDA not available")
-    except ImportError:
-        print("Warning: Could not import torch, proceeding with CPU-only build")
-else:
-    print("Warning: PyTorch not found during build, proceeding with default configuration")
-
-# Try to detect TensorFlow for additional packages (optional)
+# Check for TensorFlow to include additional packages
 tf_spec = importlib.util.find_spec("tensorflow")
 if tf_spec is not None and sys.platform != 'win32':
     packages.append('pydiffvg_tensorflow')
-    if not build_with_cuda:
-        try:
-            import tensorflow as tf
-            if tf.test.is_gpu_available(cuda_only=True, min_cuda_compute_capability=None):
-                build_with_cuda = True
-                print("CUDA detected via TensorFlow")
-        except (ImportError, AttributeError):
-            print("Warning: Could not detect CUDA via TensorFlow")
 
-# Override build_with_cuda with environment variable
+# CUDA configuration: Default to enabled, user can override with DIFFVG_CUDA=0
+build_with_cuda = True
 if 'DIFFVG_CUDA' in os.environ:
     build_with_cuda = os.environ['DIFFVG_CUDA'] == '1'
-    print(f"CUDA build override via environment: {build_with_cuda}")
 
 print(f"Building packages: {packages}")
 print(f"CUDA support: {build_with_cuda}")
